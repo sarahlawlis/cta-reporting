@@ -59,12 +59,16 @@
       font-size: 13px;
       font-weight: 600;
     }
-    select {
-      width: 100%;
-      padding: 6px 8px;
-      border-radius: 8px;
-      border: 1px solid #cbd0d6;
-      background: white;
+    .line-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 12px;
+      margin-top: 4px;
+    }
+    .line-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 13px;
     }
     .toggle-group {
@@ -98,10 +102,6 @@
     <h1>CTA Live Trains</h1>
     <div class="muted">Updates every 30s. Hover/tap markers for details.</div>
     <div class="controls">
-      <div>
-        <label for="lineSelect">Lines</label>
-        <select id="lineSelect" multiple size="4"></select>
-      </div>
       <div id="delayFilter">
         <label>Delay Filter</label>
         <div class="toggle-group" id="delayToggle">
@@ -117,6 +117,10 @@
           <button data-filter="arriving">Arriving</button>
           <button data-filter="in_transit">In Transit</button>
         </div>
+      </div>
+      <div>
+        <label>Lines</label>
+        <div class="line-options" id="lineSelect"></div>
       </div>
     </div>
   </div>
@@ -144,6 +148,17 @@
       p: "#6f42c1",
       y: "#f1c40f",
     };
+
+    const linesList = [
+      { value: "red", label: "Red" },
+      { value: "blue", label: "Blue" },
+      { value: "brn", label: "Brown" },
+      { value: "g", label: "Green" },
+      { value: "org", label: "Orange" },
+      { value: "pink", label: "Pink" },
+      { value: "p", label: "Purple" },
+      { value: "y", label: "Yellow" },
+    ];
 
     const markers = new Map();
     const REFRESH_MS = 30_000;
@@ -191,15 +206,24 @@
     }
 
     function getSelectedLines() {
-      const select = document.getElementById("lineSelect");
-      return new Set(Array.from(select.selectedOptions).map((opt) => opt.value));
+      const container = document.getElementById("lineSelect");
+      const allBox = container.querySelector("input[value='all']");
+      if (allBox && allBox.checked) {
+        return new Set(linesList.map((line) => line.value));
+      }
+
+      return new Set(
+        Array.from(container.querySelectorAll("input[type='checkbox']:checked"))
+          .map((cb) => cb.value)
+          .filter((value) => value !== "all")
+      );
     }
 
     function renderFiltered() {
       const selected = getSelectedLines();
       const filtered = lastFeatures.filter(({ properties }) => {
         const line = (properties.line || "").toLowerCase();
-        const matchesLine = selected.size === 0 || selected.has(line);
+        const matchesLine = selected.size > 0 && selected.has(line);
 
         const delayed = parseDelayed(properties.is_delayed);
         const approaching = parseApproaching(properties.is_approaching);
@@ -273,27 +297,45 @@
     setInterval(fetchTrains, REFRESH_MS);
 
     // UI wiring
-    const linesList = [
-      { value: "red", label: "Red" },
-      { value: "blue", label: "Blue" },
-      { value: "brn", label: "Brown" },
-      { value: "g", label: "Green" },
-      { value: "org", label: "Orange" },
-      { value: "pink", label: "Pink" },
-      { value: "p", label: "Purple" },
-      { value: "y", label: "Yellow" },
-    ];
-
     const lineSelect = document.getElementById("lineSelect");
-    linesList.forEach(({ value, label }) => {
-      const opt = document.createElement("option");
-      opt.value = value;
-      opt.textContent = label;
-      lineSelect.appendChild(opt);
+    const allOption = { value: "all", label: "All" };
+    const linesWithAll = [allOption, ...linesList];
+
+    function setAllCheckboxes(checked) {
+      lineSelect.querySelectorAll("input[type='checkbox']").forEach((cb) => {
+        cb.checked = checked;
+      });
+    }
+
+    linesWithAll.forEach(({ value, label }) => {
+      const wrapper = document.createElement("label");
+      wrapper.className = "line-option";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = value;
+      checkbox.checked = true;
+
+      checkbox.addEventListener("change", () => {
+        if (value === "all") {
+          setAllCheckboxes(checkbox.checked);
+        } else {
+          const allBox = lineSelect.querySelector("input[value='all']");
+          if (allBox) {
+            const allLinesChecked = linesList.every(
+              (line) => lineSelect.querySelector(`input[value='${line.value}']`).checked
+            );
+            allBox.checked = allLinesChecked;
+          }
+        }
+        renderFiltered();
+      });
+
+      const text = document.createTextNode(label);
+      wrapper.appendChild(checkbox);
+      wrapper.appendChild(text);
+      lineSelect.appendChild(wrapper);
     });
-    // Select all by default
-    Array.from(lineSelect.options).forEach((opt) => (opt.selected = true));
-    lineSelect.addEventListener("change", renderFiltered);
 
     document.querySelectorAll("#delayToggle button").forEach((btn) => {
       btn.addEventListener("click", () => {
